@@ -7,6 +7,9 @@ import java.time.Duration
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.request.*
+import ru.aasmc.Connection
+import java.util.*
+import kotlin.collections.LinkedHashSet
 
 fun Application.configureSockets() {
     install(WebSockets) {
@@ -16,12 +19,26 @@ fun Application.configureSockets() {
         masking = false
     }
     routing {
+        val connections = Collections.synchronizedSet<Connection?>(LinkedHashSet())
         webSocket("/chat") {
-            send("You are connected!")
-            for (frame in incoming) {
-                frame as? Frame.Text ?: continue
-                val receivedText = frame.readText()
-                send("You said: $receivedText")
+            println("Adding user!")
+            val thisconnection = Connection(this)
+            connections += thisconnection
+            try {
+                send("You are connected! There are ${connections.count()} users here.")
+                for (frame in incoming) {
+                    frame as? Frame.Text ?: continue
+                    val receivedText = frame.readText()
+                    val textWithUserName = "[${thisconnection.name}]: $receivedText"
+                    connections.forEach {
+                        it.session.send(textWithUserName)
+                    }
+                }
+            } catch (e: Exception) {
+                println(e.localizedMessage)
+            } finally {
+                println("Removing $thisconnection")
+                connections -= thisconnection
             }
         }
     }
